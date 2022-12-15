@@ -167,12 +167,12 @@ func NewClientExt(rawRepoURL string, root string, creds Creds, insecure bool, en
 
 // Returns a HTTP client object suitable for go-git to use using the following
 // pattern:
-// - If insecure is true, always returns a client with certificate verification
-//   turned off.
-// - If one or more custom certificates are stored for the repository, returns
-//   a client with those certificates in the list of root CAs used to verify
-//   the server's certificate.
-// - Otherwise (and on non-fatal errors), a default HTTP client is returned.
+//   - If insecure is true, always returns a client with certificate verification
+//     turned off.
+//   - If one or more custom certificates are stored for the repository, returns
+//     a client with those certificates in the list of root CAs used to verify
+//     the server's certificate.
+//   - Otherwise (and on non-fatal errors), a default HTTP client is returned.
 func GetRepoHTTPClient(repoURL string, insecure bool, creds Creds, proxyURL string) *http.Client {
 	// Default HTTP client
 	var customHTTPClient = &http.Client{
@@ -387,7 +387,8 @@ func (m *nativeGitClient) Checkout(revision string, submoduleEnabled bool) error
 	if revision == "" || revision == "HEAD" {
 		revision = "origin/HEAD"
 	}
-	if _, err := m.runCmd("checkout", "--force", revision); err != nil {
+	var timeout time.Duration = 750 * time.Millisecond
+	if _, err := m.runCmdWithTimeout(timeout, "checkout", "--force", revision); err != nil {
 		return err
 	}
 	// We must populate LFS content by using lfs checkout, if we have at least
@@ -616,6 +617,11 @@ func (m *nativeGitClient) runCmd(args ...string) (string, error) {
 	return m.runCmdOutput(cmd)
 }
 
+func (m *nativeGitClient) runCmdWithTimeout(timeout time.Duration, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	return m.runCmdOutput(cmd, timeout)
+}
+
 // runCredentialedCmd is a convenience function to run a git command with username/password credentials
 // nolint:unparam
 func (m *nativeGitClient) runCredentialedCmd(command string, args ...string) error {
@@ -630,7 +636,7 @@ func (m *nativeGitClient) runCredentialedCmd(command string, args ...string) err
 	return err
 }
 
-func (m *nativeGitClient) runCmdOutput(cmd *exec.Cmd) (string, error) {
+func (m *nativeGitClient) runCmdOutput(cmd *exec.Cmd, timeoutOptional ...time.Duration) (string, error) {
 	cmd.Dir = m.root
 	cmd.Env = append(os.Environ(), cmd.Env...)
 	// Set $HOME to nowhere, so we can be execute Git regardless of any external
@@ -662,5 +668,8 @@ func (m *nativeGitClient) runCmdOutput(cmd *exec.Cmd) (string, error) {
 
 	cmd.Env = proxy.UpsertEnv(cmd, m.proxy)
 
+	if len(timeoutOptional) == 1 {
+		return executil.RunWithRedactorAndTimeout(cmd, timeoutOptional[0], nil)
+	}
 	return executil.Run(cmd)
 }
