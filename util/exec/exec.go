@@ -22,10 +22,10 @@ type ExecRunOpts struct {
 }
 
 func init() {
-	initTimeout()
+	InitTimeout()
 }
 
-func initTimeout() {
+func InitTimeout() {
 	var err error
 	timeout, err = time.ParseDuration(os.Getenv("ARGOCD_EXEC_TIMEOUT"))
 	if err != nil {

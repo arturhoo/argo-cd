@@ -14,6 +14,7 @@ import (
 	"github.com/argoproj/argo-cd/v2/test/fixture/log"
 	"github.com/argoproj/argo-cd/v2/test/fixture/path"
 	"github.com/argoproj/argo-cd/v2/test/fixture/test"
+	"github.com/argoproj/argo-cd/v2/util/exec"
 )
 
 func TestIsCommitSHA(t *testing.T) {
@@ -410,4 +411,38 @@ func TestListRevisions(t *testing.T) {
 	assert.Contains(t, lsResult.Tags, testTag)
 	assert.NotContains(t, lsResult.Branches, testTag)
 	assert.NotContains(t, lsResult.Tags, testBranch)
+}
+
+func TestInterruptedGitCheckout(t *testing.T) {
+	p := t.TempDir()
+
+	client, err := NewClientExt("https://github.com/arturhoo/argocd-example-apps-large.git ", p, NopCreds{}, false, false, "")
+	assert.NoError(t, err)
+
+	err = client.Init()
+	assert.NoError(t, err)
+
+	err = client.Fetch("")
+	assert.NoError(t, err)
+
+	commitSHA := "3cf990c141922e61becdfd7d900902bdcb57c238"
+	err = client.Fetch(commitSHA)
+	assert.NoError(t, err)
+
+	defer func() { _ = os.Unsetenv("ARGOCD_EXEC_TIMEOUT") }()
+	_ = os.Setenv("ARGOCD_EXEC_TIMEOUT", "300ms")
+	exec.InitTimeout()
+
+	err = client.Checkout("FETCH_HEAD", true)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "failed timeout")
+
+	_ = os.Setenv("ARGOCD_EXEC_TIMEOUT", "90s")
+	exec.InitTimeout()
+
+	err = client.Fetch("")
+	assert.NoError(t, err)
+
+	err = client.Checkout("main", true)
+	assert.NoError(t, err)
 }
